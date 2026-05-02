@@ -55,18 +55,14 @@ func Lte(field string, value any) bson.D {
 // In builds a $in filter: { field: { $in: [values...] } }
 func In(field string, values ...any) bson.D {
 	arr := make(bson.A, len(values))
-	for i, v := range values {
-		arr[i] = v
-	}
+	copy(arr, values)
 	return bson.D{{Key: field, Value: bson.D{{Key: "$in", Value: arr}}}}
 }
 
 // Nin builds a $nin filter: { field: { $nin: [values...] } }
 func Nin(field string, values ...any) bson.D {
 	arr := make(bson.A, len(values))
-	for i, v := range values {
-		arr[i] = v
-	}
+	copy(arr, values)
 	return bson.D{{Key: field, Value: bson.D{{Key: "$nin", Value: arr}}}}
 }
 
@@ -92,9 +88,7 @@ func ElemMatch(field string, filter bson.D) bson.D {
 // All builds an $all filter.
 func All(field string, values ...any) bson.D {
 	arr := make(bson.A, len(values))
-	for i, v := range values {
-		arr[i] = v
-	}
+	copy(arr, values)
 	return bson.D{{Key: field, Value: bson.D{{Key: "$all", Value: arr}}}}
 }
 
