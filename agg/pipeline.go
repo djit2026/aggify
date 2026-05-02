@@ -17,8 +17,8 @@ package agg
 import (
 	"encoding/json"
 
-	"github.com/rick/mono-query/expr"
-	"github.com/rick/mono-query/stage"
+	"github.com/djit2026/aggify/expr"
+	"github.com/djit2026/aggify/stage"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
