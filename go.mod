@@ -1,4 +1,4 @@
-module github.com/rick/mono-query
+module github.com/djit2026/aggify
 
 go 1.22.3
 

@@ -1,4 +1,4 @@
-# mono-query
+# aggify
 
 > **A production-grade, composable MongoDB aggregation pipeline builder for Go.**
 
