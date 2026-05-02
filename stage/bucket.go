@@ -29,9 +29,7 @@ func Bucket(groupBy expr.Expr, boundaries []BucketBoundary, defaultID any, outpu
 
 func (b bucketStage) Build() bson.D {
 	bounds := make(bson.A, len(b.boundaries))
-	for i, bnd := range b.boundaries {
-		bounds[i] = bnd
-	}
+	copy(bounds, b.boundaries)
 	doc := bson.D{
 		{Key: "groupBy", Value: b.groupBy.Build()},
 		{Key: "boundaries", Value: bounds},
