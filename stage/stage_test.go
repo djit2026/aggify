@@ -3,8 +3,8 @@ package stage
 import (
 	"testing"
 
-	"github.com/rick/mono-query/expr"
-	"github.com/rick/mono-query/q"
+	"github.com/djit2026/aggify/expr"
+	"github.com/djit2026/aggify/q"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson"

@@ -1,7 +1,7 @@
 package stage
 
 import (
-	"github.com/rick/mono-query/expr"
+	"github.com/djit2026/aggify/expr"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -9,10 +9,10 @@ import (
 type BucketBoundary = any
 
 type bucketStage struct {
-	groupBy     expr.Expr
-	boundaries  []BucketBoundary
-	defaultID   any
-	output      []Accumulator
+	groupBy    expr.Expr
+	boundaries []BucketBoundary
+	defaultID  any
+	output     []Accumulator
 }
 
 // Bucket creates a $bucket stage.
