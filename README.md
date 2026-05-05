@@ -22,7 +22,7 @@ bson.D{{"$group", bson.D{
 }}}
 ```
 
-`mono-query` replaces that with a composable, readable DSL:
+`aggify` replaces that with a composable, readable DSL:
 
 ```go
 // ✅ After
@@ -57,7 +57,7 @@ stage.Group(
 ## Installation
 
 ```bash
-go get github.com/rick/mono-query
+go get github.com/djit2026/aggify
 ```
 
 ---
@@ -66,10 +66,10 @@ go get github.com/rick/mono-query
 
 ```go
 import (
-    "github.com/rick/mono-query/agg"
-    "github.com/rick/mono-query/expr"
-    "github.com/rick/mono-query/q"
-    "github.com/rick/mono-query/stage"
+    "github.com/djit2026/aggify/agg"
+    "github.com/djit2026/aggify/expr"
+    "github.com/djit2026/aggify/q"
+    "github.com/djit2026/aggify/stage"
 )
 
 pipeline := agg.New().
@@ -307,7 +307,7 @@ fmt.Println(agg.New().Match(...).MustJSON())
 
 ## Composable Stage Pattern
 
-The real power of `mono-query` is the **composable stage** pattern. Any `func() stage.Stage` becomes a reusable, testable pipeline unit:
+The real power of `aggify` is the **composable stage** pattern. Any `func() stage.Stage` becomes a reusable, testable pipeline unit:
 
 ```go
 // In your domain package
