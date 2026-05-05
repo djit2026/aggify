@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 
 	"github.com/djit2026/aggify/expr"
+	"github.com/djit2026/aggify/search"
 	"github.com/djit2026/aggify/stage"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -133,6 +134,36 @@ func (p *Pipeline) Count(field string) *Pipeline {
 // Raw appends a raw bson.D as a stage. Use as an escape hatch.
 func (p *Pipeline) Raw(d bson.D) *Pipeline {
 	return p.Stage(stage.Raw(d))
+}
+
+// SetWindowFields appends a $setWindowFields stage.
+func (p *Pipeline) SetWindowFields(partitionBy expr.Expr, sortBy stage.SortWindow, outputs ...stage.WindowOutput) *Pipeline {
+	return p.Stage(stage.SetWindowFields(partitionBy, sortBy, outputs...))
+}
+
+// Out appends an $out stage.
+func (p *Pipeline) Out(collection string) *Pipeline {
+	return p.Stage(stage.Out(collection))
+}
+
+// OutToDB appends an $out stage directed at a specific database.
+func (p *Pipeline) OutToDB(db, collection string) *Pipeline {
+	return p.Stage(stage.OutToDB(db, collection))
+}
+
+// Merge appends a $merge stage.
+func (p *Pipeline) Merge(opts stage.MergeOptions) *Pipeline {
+	return p.Stage(stage.Merge(opts))
+}
+
+// Search appends a $search stage.
+func (p *Pipeline) Search(op search.Operator) *Pipeline {
+	return p.Stage(stage.Search(op))
+}
+
+// SearchMeta appends a $searchMeta stage.
+func (p *Pipeline) SearchMeta(op search.Operator) *Pipeline {
+	return p.Stage(stage.SearchMeta(op))
 }
 
 // Len returns the current number of stages.

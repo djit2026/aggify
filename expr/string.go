@@ -89,3 +89,31 @@ func RegexFind(input Expr, regex string, options ...string) Expr {
 	}
 	return rawExpr{bson.D{{Key: "$regexFind", Value: doc}}}
 }
+
+// ReplaceOne builds a $replaceOne expression.
+func ReplaceOne(input, find, replacement Expr) Expr {
+	return rawExpr{bson.D{{Key: "$replaceOne", Value: bson.D{
+		{Key: "input", Value: input.Build()},
+		{Key: "find", Value: find.Build()},
+		{Key: "replacement", Value: replacement.Build()},
+	}}}}
+}
+
+// ReplaceAll builds a $replaceAll expression.
+func ReplaceAll(input, find, replacement Expr) Expr {
+	return rawExpr{bson.D{{Key: "$replaceAll", Value: bson.D{
+		{Key: "input", Value: input.Build()},
+		{Key: "find", Value: find.Build()},
+		{Key: "replacement", Value: replacement.Build()},
+	}}}}
+}
+
+// Substr builds a $substr expression. Note: $substr is deprecated in MongoDB in favor of $substrCP, but provided for completeness.
+func Substr(str Expr, start, length int) Expr {
+	return rawExpr{bson.D{{Key: "$substr", Value: bson.A{str.Build(), start, length}}}}
+}
+
+// IndexOfBytes builds a $indexOfBytes expression (finds position of substring in bytes).
+func IndexOfBytes(str, sub Expr) Expr {
+	return rawExpr{bson.D{{Key: "$indexOfBytes", Value: bson.A{str.Build(), sub.Build()}}}}
+}

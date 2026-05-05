@@ -45,8 +45,10 @@ stage.Group(
 - **Zero reflection** — direct compilation to `bson.D` / `mongo.Pipeline`
 - **Zero overhead** — output is identical to hand-written BSON
 - **Composable stages** — any `func() stage.Stage` is a reusable pipeline unit
-- **Full expression engine** — comparison, logical, conditional, array, object, arithmetic, string, type operators
-- **Complete stage coverage** — `$match`, `$group`, `$project`, `$lookup` (simple + pipeline), `$unwind`, `$sort`, `$limit`, `$skip`, `$addFields`, `$set`, `$unset`, `$replaceRoot`, `$replaceWith`, `$count`, `$facet`, `$bucket`, `$bucketAuto`
+- **Full expression engine** — comparison, logical, conditional, array, object, arithmetic, string, type, date, and set operators
+- **Complete stage coverage** — `$match`, `$group`, `$project`, `$lookup`, `$unwind`, `$sort`, `$limit`, `$skip`, `$addFields`, `$set`, `$unset`, `$replaceRoot`, `$replaceWith`, `$count`, `$facet`, `$bucket`, `$bucketAuto`, `$setWindowFields`, `$out`, `$merge`
+- **Atlas Search** — dedicated DSL for `$search` and `$searchMeta`
+- **Type-safe schema generation** — optional `aggify-gen` CLI tool to generate typo-free nested BSON path constants from your structs
 - **Escape hatches** — `stage.Raw(bson.D{...})` and `expr.Raw(...)` for anything not yet covered
 - **Debuggable** — `pipeline.MustJSON()` prints the final pipeline as indented JSON
 
@@ -92,8 +94,9 @@ cursor, err := collection.Aggregate(ctx, pipeline)
 |---------|---------------|
 | `agg`   | Fluent pipeline builder — assembles stages via `.Stage()` |
 | `stage` | Individual stage builders (`$match`, `$group`, `$lookup`, …) |
-| `expr`  | Aggregation expression engine (`$cond`, `$filter`, `$mergeObjects`, …) |
+| `expr`  | Aggregation expression engine (`$cond`, `$filter`, `$dateAdd`, `$setEquals`, …) |
 | `q`     | Query filter helpers for `$match` / `Find` |
+| `search`| MongoDB Atlas Search operators (`$search`) |
 
 ---
 
@@ -146,6 +149,16 @@ expr.Round(expr.Field("total"), 2)
 expr.Concat(expr.Field("first"), expr.Value(" "), expr.Field("last"))
 expr.ToLower(expr.Field("email"))
 expr.RegexMatch(expr.Field("email"), `^.+@.+\..+$`, "i")
+expr.ReplaceAll(expr.Field("name"), expr.Value(" "), expr.Value("-"))
+
+// Date & Time
+expr.DateTrunc(expr.Field("createdAt"), "month")
+expr.DateAdd(expr.Field("lastLogin"), expr.Value(7), "day")
+expr.Year(expr.Field("createdAt"))
+
+// Set Math
+expr.SetIntersection(expr.Field("roles"), expr.Value([]string{"admin", "editor"}))
+expr.SetEquals(expr.Field("tags"), expr.Value([]string{"go", "mongodb"}))
 
 // Type conversion
 expr.ToString(expr.Field("_id"))
@@ -246,6 +259,20 @@ stage.Bucket(expr.Field("price"), []any{0, 50, 100, 500}, "Other",
 )
 stage.BucketAuto(expr.Field("age"), 5)
 
+// $setWindowFields
+stage.SetWindowFields(
+    expr.Field("state"),
+    stage.SortWindow{{"orderDate", 1}},
+    stage.WindowFE("runningTotal", expr.Sum(expr.Field("price")), stage.WindowBounds("documents", "unbounded", "current")),
+)
+
+// $search (Atlas Search)
+stage.Search(search.Compound().Must(search.Text("title", "golang")))
+
+// $out / $merge
+stage.Out("targetCollection")
+stage.Merge(stage.MergeOptions{IntoCollection: "dailySales", WhenMatched: "replace"})
+
 // Escape hatch
 stage.Raw(bson.D{{Key: "$sample", Value: bson.D{{Key: "size", Value: 5}}}})
 ```
@@ -267,6 +294,8 @@ pipeline := agg.New().
     AddFields(stage.FE("x", expr.Value(1))).
     Unset("secret").
     Count("total").
+    SetWindowFields(expr.Field("category"), stage.SortWindow{{"date", 1}}, stage.WindowFE("rank", expr.Raw(bson.D{{"$rank", bson.D{}}}), nil)).
+    Out("reports").
     Raw(bson.D{...}).      // escape hatch
     Build()                // → mongo.Pipeline
 
@@ -315,6 +344,43 @@ func TestFilterActiveItems(t *testing.T) {
     got := orders.FilterActiveItems().Build()
     // assert the bson.D structure
 }
+```
+
+---
+
+## Type-Safe Schemas (`aggify-gen`)
+
+Eliminate typos and get perfect IDE autocomplete by generating type-safe BSON paths from your structs.
+
+**1. Install the tool:**
+```bash
+go install github.com/djit2026/aggify/cmd/aggify-gen@latest
+```
+
+**2. Annotate your models:**
+```go
+//go:generate aggify-gen -type User -pkg schema -out schema/schema.go
+
+type Address struct {
+    City string `bson:"city"`
+}
+
+type User struct {
+    Email   string  `bson:"email"`
+    Address Address `bson:"address"`
+}
+```
+
+**3. Use the generated schema in your queries:**
+```go
+import "myproject/schema"
+
+pipeline := agg.New().
+    Match(q.Eq(schema.User.Email, "test@test.com")).
+    Project(stage.Project().
+        Include(schema.User.Address.City),
+    ).
+    Build()
 ```
 
 ---
