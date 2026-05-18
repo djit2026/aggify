@@ -45,8 +45,9 @@ stage.Group(
 - **Zero reflection** — direct compilation to `bson.D` / `mongo.Pipeline`
 - **Zero overhead** — output is identical to hand-written BSON
 - **Composable stages** — any `func() stage.Stage` is a reusable pipeline unit
-- **Full expression engine** — comparison, logical, conditional, array, object, arithmetic, string, type, date, and set operators
-- **Complete stage coverage** — `$match`, `$group`, `$project`, `$lookup`, `$unwind`, `$sort`, `$limit`, `$skip`, `$addFields`, `$set`, `$unset`, `$replaceRoot`, `$replaceWith`, `$count`, `$facet`, `$bucket`, `$bucketAuto`, `$setWindowFields`, `$out`, `$merge`
+- **Full expression engine** — comparison, logical, conditional, array, object, arithmetic, string, type, date, set, trigonometry, and dynamic field operators
+- **Complete stage coverage** — `$match`, `$group`, `$project`, `$lookup`, `$unwind`, `$sort`, `$limit`, `$skip`, `$addFields`, `$set`, `$unset`, `$replaceRoot`, `$replaceWith`, `$count`, `$facet`, `$bucket`, `$bucketAuto`, `$setWindowFields`, `$geoNear`, `$out`, `$merge`
+- **Geo queries** — full GeoJSON geometry builders + `$geoNear` stage + `$near`, `$geoWithin`, `$geoIntersects` query filters
 - **Atlas Search** — dedicated DSL for `$search` and `$searchMeta`
 - **Type-safe schema generation** — optional `aggify-gen` CLI tool to generate typo-free nested BSON path constants from your structs
 - **Escape hatches** — `stage.Raw(bson.D{...})` and `expr.Raw(...)` for anything not yet covered
@@ -90,13 +91,14 @@ cursor, err := collection.Aggregate(ctx, pipeline)
 
 ## Packages
 
-| Package | Responsibility |
-|---------|---------------|
-| `agg`   | Fluent pipeline builder — assembles stages via `.Stage()` |
-| `stage` | Individual stage builders (`$match`, `$group`, `$lookup`, …) |
-| `expr`  | Aggregation expression engine (`$cond`, `$filter`, `$dateAdd`, `$setEquals`, …) |
-| `q`     | Query filter helpers for `$match` / `Find` |
-| `search`| MongoDB Atlas Search operators (`$search`) |
+| Package  | Responsibility |
+|----------|----------------|
+| `agg`    | Fluent pipeline builder — assembles stages via `.Stage()` |
+| `stage`  | Individual stage builders (`$match`, `$group`, `$geoNear`, …) |
+| `expr`   | Aggregation expression engine (`$cond`, `$filter`, `$dateAdd`, `$sin`, `$getField`, …) |
+| `q`      | Query filter helpers for `$match` / `Find` (including geo filters) |
+| `geo`    | GeoJSON geometry constructors (`Point`, `Polygon`, `LineString`, …) and legacy shapes |
+| `search` | MongoDB Atlas Search operators (`$search`) |
 
 ---
 
@@ -149,16 +151,43 @@ expr.Round(expr.Field("total"), 2)
 expr.Concat(expr.Field("first"), expr.Value(" "), expr.Field("last"))
 expr.ToLower(expr.Field("email"))
 expr.RegexMatch(expr.Field("email"), `^.+@.+\..+$`, "i")
+expr.RegexFindAll(expr.Field("body"), `\d+`, "")
 expr.ReplaceAll(expr.Field("name"), expr.Value(" "), expr.Value("-"))
 
 // Date & Time
 expr.DateTrunc(expr.Field("createdAt"), "month")
 expr.DateAdd(expr.Field("lastLogin"), expr.Value(7), "day")
 expr.Year(expr.Field("createdAt"))
+expr.ISOWeek(expr.Field("createdAt"))
+expr.DateFromParts(expr.DateFromPartsOptions{Year: expr.Value(2024), Month: expr.Value(6), Day: expr.Value(1)})
+expr.DateToParts(expr.Field("createdAt"), expr.DateToPartsOptions{ISO: true})
 
 // Set Math
 expr.SetIntersection(expr.Field("roles"), expr.Value([]string{"admin", "editor"}))
 expr.SetEquals(expr.Field("tags"), expr.Value([]string{"go", "mongodb"}))
+
+// Trigonometry & Angle Conversion
+expr.Sin(expr.Field("angleRad"))
+expr.Atan2(expr.Field("y"), expr.Field("x"))
+expr.DegreesToRadians(expr.Field("angleDeg"))
+expr.RadiansToDegrees(expr.Field("angleRad"))
+
+// Dynamic Field Access (MongoDB 5.0+)
+expr.GetField("price.usd", expr.Root)   // safe dot/dollar access
+expr.SetField("status", expr.Root, expr.Value("active"))
+expr.UnsetField("password", expr.Root)
+
+// Array (MongoDB 5.2+)
+expr.SortArray(expr.Field("scores"), nil, expr.Value(-1))   // sort scalar array desc
+expr.FirstN(expr.Value(3), expr.Field("scores"))            // top-3 elements
+expr.MaxN(expr.Value(3), expr.Field("scores"))              // 3 largest values
+expr.Top(bson.D{{"score", -1}}, expr.Field("playerName"))  // highest-score doc
+expr.Range(expr.Value(0), expr.Value(10), expr.Value(2))   // [0, 2, 4, 6, 8]
+
+// Misc
+expr.Literal("$notAField")   // force literal interpretation
+expr.Rand()                   // random float 0–1
+expr.TsSecond(expr.Field("ts"))  // BSON Timestamp seconds component
 
 // Type conversion
 expr.ToString(expr.Field("_id"))
@@ -194,6 +223,13 @@ q.Nor(q.Eq("status", "banned"))
 
 // Bridge to aggregation expressions
 q.Expr(expr.Gt(expr.Field("spend"), expr.Field("budget")))
+
+// Geo query filters (require 2dsphere index)
+q.Near("location", geo.Point(-73.98, 40.75), q.NearOptions{MaxDistance: ptr(5000.0)})
+q.NearSphere("location", geo.Point(-73.98, 40.75))
+q.GeoWithin("location", geo.Polygon(ring))                            // GeoJSON shape
+q.GeoWithinShape("loc", geo.Box(geo.LngLat(-74, 40), geo.LngLat(-73, 41))) // legacy box
+q.GeoIntersects("coverage", geo.Point(-73.98, 40.75))
 ```
 
 ---
@@ -266,6 +302,24 @@ stage.SetWindowFields(
     stage.WindowFE("runningTotal", expr.Sum(expr.Field("price")), stage.WindowBounds("documents", "unbounded", "current")),
 )
 
+// Window-specific operators (used inside WindowFE)
+stage.WindowFE("rank",     stage.WinRank(), nil)
+stage.WindowFE("denseRank",stage.WinDenseRank(), nil)
+stage.WindowFE("docNum",   stage.WinDocumentNumber(), nil)
+stage.WindowFE("shifted",  stage.WinShift(expr.Field("price"), -1, expr.Value(0)), nil)
+stage.WindowFE("cov",      stage.WinCovariancePop(expr.Field("x"), expr.Field("y")), stage.WindowBounds("documents", "unbounded", "current"))
+stage.WindowFE("ema",      stage.WinExpMovingAvg(expr.Field("price"), 10, 0), nil)
+
+// $geoNear  (must be first stage; requires 2dsphere index)
+stage.GeoNear(stage.GeoNearOptions{
+    Near:          geo.Point(-73.9857, 40.7580), // [lng, lat]
+    DistanceField: "dist.meters",
+    Spherical:     true,
+    MaxDistance:   ptr(2000.0),            // 2 km
+    Query:         q.Eq("category", "restaurant"),
+    IncludeLocs:   "dist.location",
+})
+
 // $search (Atlas Search)
 stage.Search(search.Compound().Must(search.Text("title", "golang")))
 
@@ -283,18 +337,23 @@ stage.Raw(bson.D{{Key: "$sample", Value: bson.D{{Key: "size", Value: 5}}}})
 
 ```go
 pipeline := agg.New().
+    GeoNear(stage.GeoNearOptions{         // must be first stage
+        Near:          geo.Point(-73.98, 40.75),
+        DistanceField: "dist.meters",
+        Spherical:     true,
+    }).
     Match(filter).
     Stage(myReusableStage()).
     Group(id, accs...).
     Lookup(from, local, foreign, as).
     Unwind("$field").
-    Sort(stage.SortField{"field", stage.Desc}).
+    Sort(stage.SortField{"dist.meters", stage.Asc}).
     Limit(20).
     Skip(0).
     AddFields(stage.FE("x", expr.Value(1))).
     Unset("secret").
     Count("total").
-    SetWindowFields(expr.Field("category"), stage.SortWindow{{"date", 1}}, stage.WindowFE("rank", expr.Raw(bson.D{{"$rank", bson.D{}}}), nil)).
+    SetWindowFields(expr.Field("category"), stage.SortWindow{{"date", 1}}, stage.WindowFE("rank", stage.WinRank(), nil)).
     Out("reports").
     Raw(bson.D{...}).      // escape hatch
     Build()                // → mongo.Pipeline
@@ -381,6 +440,83 @@ pipeline := agg.New().
         Include(schema.User.Address.City),
     ).
     Build()
+```
+
+---
+
+## Package: `geo` — Geospatial Support
+
+The `geo` package provides type-safe GeoJSON geometry builders and legacy shape
+helpers for use with geo query operators and the `$geoNear` stage.
+
+> ⚠️ MongoDB uses **[longitude, latitude]** order for GeoJSON — the opposite of
+> the common GPS [lat, lng] convention. All helpers in this package follow the
+> GeoJSON standard.
+
+```go
+import "github.com/djit2026/aggify/geo"
+
+// GeoJSON geometries
+geo.Point(-73.9857, 40.7580)             // Times Square
+geo.LineString(
+    geo.LngLat(-73.98, 40.75),
+    geo.LngLat(-74.00, 40.71),
+)
+geo.Polygon([]geo.Coord{
+    geo.LngLat(-73.99, 40.76),
+    geo.LngLat(-73.98, 40.76),
+    geo.LngLat(-73.98, 40.75),
+    geo.LngLat(-73.99, 40.76), // closed
+})
+geo.MultiPoint(geo.LngLat(-73.98, 40.75), geo.LngLat(-74.00, 40.71))
+geo.GeometryCollection(geo.Point(-73.98, 40.75), geo.LineString(...))
+
+// Legacy shapes (flat-earth / planar)
+geo.Box(geo.LngLat(-74.00, 40.71), geo.LngLat(-73.96, 40.75))
+geo.Circle(geo.LngLat(-73.98, 40.75), 100)             // 100 unit radius
+geo.CenterSphere(geo.LngLat(-73.98, 40.75), 5000.0/6378100.0) // 5 km in radians
+geo.LegacyPolygon(geo.LngLat(-74, 40), geo.LngLat(-73, 40), geo.LngLat(-73, 41))
+```
+
+### Geo Queries — Full Example
+
+```go
+// Find the 10 closest restaurants to Times Square within 2 km
+pipeline := agg.New().
+    GeoNear(stage.GeoNearOptions{
+        Near:               geo.Point(-73.9857, 40.7580),
+        DistanceField:      "dist.meters",
+        MaxDistance:        ptr(2000.0),
+        Spherical:          true,
+        Query:              q.Eq("category", "restaurant"),
+        IncludeLocs:        "dist.location",
+        DistanceMultiplier: ptr(0.001), // convert to km in the output
+    }).
+    Limit(10).
+    Build()
+
+// Filter a Find query by polygon
+filter := q.GeoWithin("location", geo.Polygon(ring))
+
+// Filter by bounding box (very fast, legacy flat-earth)
+filter = q.GeoWithinShape("location", geo.Box(
+    geo.LngLat(-74.00, 40.71),
+    geo.LngLat(-73.96, 40.75),
+))
+
+// Filter by spherical radius
+filter = q.GeoWithinShape("location", geo.CenterSphere(
+    geo.LngLat(-73.98, 40.75),
+    5000.0/6378100.0, // 5 km in radians
+))
+
+// Near query (returns sorted by distance)
+filter = q.Near("location", geo.Point(-73.98, 40.75), q.NearOptions{
+    MaxDistance: ptr(500.0), // metres
+})
+
+// Intersects — useful for coverage areas / service zones
+filter = q.GeoIntersects("serviceArea", geo.Point(-73.98, 40.75))
 ```
 
 ---

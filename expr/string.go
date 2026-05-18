@@ -117,3 +117,32 @@ func Substr(str Expr, start, length int) Expr {
 func IndexOfBytes(str, sub Expr) Expr {
 	return rawExpr{bson.D{{Key: "$indexOfBytes", Value: bson.A{str.Build(), sub.Build()}}}}
 }
+
+// RegexFindAll builds a $regexFindAll expression.
+// Returns all matches as an array of {match, idx, captures} documents.
+func RegexFindAll(input Expr, regex string, options ...string) Expr {
+	doc := bson.D{
+		{Key: "input", Value: input.Build()},
+		{Key: "regex", Value: regex},
+	}
+	if len(options) > 0 && options[0] != "" {
+		doc = append(doc, bson.E{Key: "options", Value: options[0]})
+	}
+	return rawExpr{bson.D{{Key: "$regexFindAll", Value: doc}}}
+}
+
+// LTrimChars builds a $ltrim expression with explicit chars to trim.
+func LTrimChars(e Expr, chars string) Expr {
+	return rawExpr{bson.D{{Key: "$ltrim", Value: bson.D{
+		{Key: "input", Value: e.Build()},
+		{Key: "chars", Value: chars},
+	}}}}
+}
+
+// RTrimChars builds a $rtrim expression with explicit chars to trim.
+func RTrimChars(e Expr, chars string) Expr {
+	return rawExpr{bson.D{{Key: "$rtrim", Value: bson.D{
+		{Key: "input", Value: e.Build()},
+		{Key: "chars", Value: chars},
+	}}}}
+}

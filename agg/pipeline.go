@@ -136,6 +136,22 @@ func (p *Pipeline) Raw(d bson.D) *Pipeline {
 	return p.Stage(stage.Raw(d))
 }
 
+// GeoNear appends a $geoNear stage.
+// $geoNear must be the first stage in the pipeline.
+// It requires a 2dsphere (or 2d) index on the location field.
+//
+//	agg.New().
+//	    GeoNear(stage.GeoNearOptions{
+//	        Near:          geo.Point(-73.98, 40.75),
+//	        DistanceField: "dist.meters",
+//	        Spherical:     true,
+//	    }).
+//	    Limit(20).
+//	    Build()
+func (p *Pipeline) GeoNear(opts stage.GeoNearOptions) *Pipeline {
+	return p.Stage(stage.GeoNear(opts))
+}
+
 // SetWindowFields appends a $setWindowFields stage.
 func (p *Pipeline) SetWindowFields(partitionBy expr.Expr, sortBy stage.SortWindow, outputs ...stage.WindowOutput) *Pipeline {
 	return p.Stage(stage.SetWindowFields(partitionBy, sortBy, outputs...))

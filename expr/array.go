@@ -123,3 +123,131 @@ func Max(e Expr) Expr {
 func Count() Expr {
 	return rawExpr{bson.D{{Key: "$count", Value: bson.D{}}}}
 }
+
+// --- MongoDB 5.2+ Array & Accumulator Operators ---
+
+// SortArrayOrder is the sort direction for $sortArray.
+type SortArrayOrder = int
+
+const (
+	SortArrayAsc  SortArrayOrder = 1
+	SortArrayDesc SortArrayOrder = -1
+)
+
+// SortArrayField specifies a sort field and direction for $sortArray.
+type SortArrayField struct {
+	Field string
+	Order SortArrayOrder
+}
+
+// SortArray builds a $sortArray expression (MongoDB 5.2+).
+// sortBy may be a single SortArrayField for document arrays,
+// or pass nil to sort a scalar array using Value(1) / Value(-1).
+//
+//	// Sort array of scalars descending
+//	expr.SortArray(expr.Field("scores"), nil, expr.Value(-1))
+//	// Sort array of documents by field
+//	expr.SortArray(expr.Field("items"), []SortArrayField{{"price", SortArrayDesc}}, nil)
+func SortArray(input Expr, fields []SortArrayField, scalarDir Expr) Expr {
+	var sortBy any
+	if len(fields) > 0 {
+		doc := bson.D{}
+		for _, f := range fields {
+			doc = append(doc, bson.E{Key: f.Field, Value: f.Order})
+		}
+		sortBy = doc
+	} else if scalarDir != nil {
+		sortBy = scalarDir.Build()
+	}
+	return rawExpr{bson.D{{Key: "$sortArray", Value: bson.D{
+		{Key: "input", Value: input.Build()},
+		{Key: "sortBy", Value: sortBy},
+	}}}}
+}
+
+// Range builds a $range expression: { $range: [start, end, step] }
+// step is optional (defaults to 1 when omitted).
+func Range(start, end Expr, step ...Expr) Expr {
+	arr := bson.A{start.Build(), end.Build()}
+	if len(step) > 0 && step[0] != nil {
+		arr = append(arr, step[0].Build())
+	}
+	return rawExpr{bson.D{{Key: "$range", Value: arr}}}
+}
+
+// FirstN builds a $firstN accumulator expression (MongoDB 5.2+).
+// Returns the first n elements of an array.
+func FirstN(n, input Expr) Expr {
+	return rawExpr{bson.D{{Key: "$firstN", Value: bson.D{
+		{Key: "n", Value: n.Build()},
+		{Key: "input", Value: input.Build()},
+	}}}}
+}
+
+// LastN builds a $lastN accumulator expression (MongoDB 5.2+).
+// Returns the last n elements of an array.
+func LastN(n, input Expr) Expr {
+	return rawExpr{bson.D{{Key: "$lastN", Value: bson.D{
+		{Key: "n", Value: n.Build()},
+		{Key: "input", Value: input.Build()},
+	}}}}
+}
+
+// MaxN builds a $maxN accumulator expression (MongoDB 5.2+).
+// Returns the n largest values.
+func MaxN(n, input Expr) Expr {
+	return rawExpr{bson.D{{Key: "$maxN", Value: bson.D{
+		{Key: "n", Value: n.Build()},
+		{Key: "input", Value: input.Build()},
+	}}}}
+}
+
+// MinN builds a $minN accumulator expression (MongoDB 5.2+).
+// Returns the n smallest values.
+func MinN(n, input Expr) Expr {
+	return rawExpr{bson.D{{Key: "$minN", Value: bson.D{
+		{Key: "n", Value: n.Build()},
+		{Key: "input", Value: input.Build()},
+	}}}}
+}
+
+// TopSortBy holds the sort spec for $top / $topN.
+type TopSortBy = bson.D
+
+// Top builds a $top accumulator expression (MongoDB 5.2+).
+// Returns the document with the highest value according to sortBy.
+func Top(sortBy TopSortBy, output Expr) Expr {
+	return rawExpr{bson.D{{Key: "$top", Value: bson.D{
+		{Key: "sortBy", Value: sortBy},
+		{Key: "output", Value: output.Build()},
+	}}}}
+}
+
+// Bottom builds a $bottom accumulator expression (MongoDB 5.2+).
+// Returns the document with the lowest value according to sortBy.
+func Bottom(sortBy TopSortBy, output Expr) Expr {
+	return rawExpr{bson.D{{Key: "$bottom", Value: bson.D{
+		{Key: "sortBy", Value: sortBy},
+		{Key: "output", Value: output.Build()},
+	}}}}
+}
+
+// TopN builds a $topN accumulator expression (MongoDB 5.2+).
+// Returns the n documents with the highest values according to sortBy.
+func TopN(n Expr, sortBy TopSortBy, output Expr) Expr {
+	return rawExpr{bson.D{{Key: "$topN", Value: bson.D{
+		{Key: "n", Value: n.Build()},
+		{Key: "sortBy", Value: sortBy},
+		{Key: "output", Value: output.Build()},
+	}}}}
+}
+
+// BottomN builds a $bottomN accumulator expression (MongoDB 5.2+).
+// Returns the n documents with the lowest values according to sortBy.
+func BottomN(n Expr, sortBy TopSortBy, output Expr) Expr {
+	return rawExpr{bson.D{{Key: "$bottomN", Value: bson.D{
+		{Key: "n", Value: n.Build()},
+		{Key: "sortBy", Value: sortBy},
+		{Key: "output", Value: output.Build()},
+	}}}}
+}

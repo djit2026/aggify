@@ -10,7 +10,7 @@ import (
 func TestSetWindowFields(t *testing.T) {
 	got := SetWindowFields(
 		expr.Field("state"),
-		SortWindow{{"orderDate", 1}},
+		SortWindow{{Key: "orderDate", Value: 1}},
 		WindowFE(
 			"cumulativeQuantityForState",
 			expr.Sum(expr.Field("quantity")),
@@ -20,7 +20,7 @@ func TestSetWindowFields(t *testing.T) {
 
 	want := bson.D{{Key: "$setWindowFields", Value: bson.D{
 		{Key: "partitionBy", Value: "$state"},
-		{Key: "sortBy", Value: SortWindow{{"orderDate", 1}}},
+		{Key: "sortBy", Value: SortWindow{{Key: "orderDate", Value: 1}}},
 		{Key: "output", Value: bson.D{
 			{Key: "cumulativeQuantityForState", Value: bson.D{
 				{Key: "$sum", Value: bson.A{"$quantity"}}, // Wait, sum of single field is not array by default in our builder.
@@ -33,7 +33,7 @@ func TestSetWindowFields(t *testing.T) {
 	// Actually, let's just test that it marshals correctly to JSON without exact bson matches
 	// because `expr.Sum` implementation might change.
 	_ = want
-	
+
 	if got[0].Key != "$setWindowFields" {
 		t.Errorf("Expected $setWindowFields, got %v", got[0].Key)
 	}
